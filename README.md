@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14639677.svg)](https://zenodo.org/doi/10.5281/zenodo.14639677)
+
 ## Continual familiarity decoding from recurrent connections in spiking networks
 This is a repository for the paper **Continual familiarity decoding from recurrent connections in spiking networks**. 
 This repository contains code to run experiments and analyze a spiking neural network model that encodes familiarity memory through local spike-timing-dependent plasticity (STDP). 
