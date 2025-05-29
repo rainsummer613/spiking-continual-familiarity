@@ -21,11 +21,10 @@ The model decodes familiarity using spike count and synchrony, outperforming LST
 ### Optimization
 Parameters for best familiarity classification accuracy are found via the genetic algorithm. 
 The following parameters are optimized:
-- STDP update scaling (_stdp_weight_),
-- Trace increase (_trace_scale_),
-- Trace memory (_tau_stdp_),
-- Total incoming weight (_total_synaptic_weight_)
-- Weight normalization interval (_weight_norm_freq_).
+- Learning rate (_learning_rate_),
+- Trace memory (_trace_memory_),
+- Total incoming weight (_total_incoming_weight_)
+- Weight normalization interval (_normalization_interval_).
 
 Parameter ranges can be found in `src/config.py`
 
@@ -56,11 +55,10 @@ Files for training and testing with HPC. Each runs a separate optimization proce
 - `test.sh` evaluates each model with multiprocessing on every core. 
 
 The **data** folder contains subfolder(s) of the structure: 
-_{input\_firing\_rate}\_{simulation\_length}\_{simulation\_length\_predict}/{optimization\_repeat\_interval}/{optimization\_sparseness}_. Currently all similation data for a single stimulus is used to predict familiarity. 
+- `stats` folder contains the results of connectivity and parameter analyses.
+_{input\_firing\_rate}\_{simulation\_length}\_{simulation\_length\_predict}_{plasticity\_type}/{optimization\_repeat\_interval}/{optimization\_sparseness}_. Currently all similation data for a single stimulus is used to predict familiarity. 
 Subfolders are organized follows: 
 - `logs` directory with log files for train (optimization) and test experiments. Subirectories are named after metrics used for optimization (sc, rsync and rsync_sc - in this case both metrics were used).
 - `plots` directory with the same structure as `data/logs`. 
 - `params` directory with best parameters found after optimization for model with each combination of repeat interval and pattern size.
 - Name of each log and parameter file is formed as follows: _gen\_opt\_{iteration}\_{n\_data\_samples}_.
-
-The **stats** folder contains the results of connectivity and parameter analyses.
