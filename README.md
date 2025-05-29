@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14639677.svg)](https://zenodo.org/doi/10.5281/zenodo.14639677)
+
 ## Continual familiarity decoding from recurrent connections in spiking networks
 This is a repository for the paper **Continual familiarity decoding from recurrent connections in spiking networks**. 
 This repository contains code to run experiments and analyze a spiking neural network model that encodes familiarity memory through local spike-timing-dependent plasticity (STDP). 
@@ -9,21 +11,28 @@ The model decodes familiarity using spike count and synchrony, outperforming LST
 - No read-out neuron, the classification is performed solely based on firing statistics.
 
 ### Classification procedure
-1) Model receives new input sample and runs for 1000 ms to encode it in lateral connectivity according to a [symmetric STDP rule](src/model.py#L65). Then firing data from the smulation run is used to predict whether the stimulus was encountered before (binary classification).
-3) Familiarity classification performance is evaluated with [Abbott accuracy](src/measure.py#L19).
+1) Model receives new input sample and runs for 1000 ms to encode it in lateral connectivity according to a unidirectional STDP or anti-STDP rule. Then firing data from the simulation run is used to predict whether the stimulus was encountered before (binary classification).
+3) Familiarity classification performance is evaluated with Abbott accuracy.
 
 ### Decoding familiarity
 1) Familiarity is decoded from spike trains for each stimulus characteristics: either their synchrony (Rsync) or spike count. If the metric value exceeds a certain threshold, the stimulus is classified as familiar.
-2) The threshold is calculated the [following way](src/experiment.py#L49): every time different thresholds are tested, and the one which leads to highest classification accurycy is selected. 
+2) The threshold is calculated the following way: every time different thresholds are tested, and the one which leads to highest classification accurycy is selected.
+
+### Experimental conditions
+Models were optimized on a continual familiarity task across various experimental conditions.
+- **Plasticity type**: Hebbian (STDP) or anti-Hebbian (anti-STDP),
+- **Input sparseness**: 0.7, 0.8, 0.9,
+- **Input correlation**: 0.0, 0.2, 0.4, 0.6, 0.8,
+- **Repeat interval**: 3, 6, 10.
+Every combination of optimized parameters was then tested on **Repeat interval** values from 1 to 30.
 
 ### Optimization
 Parameters for best familiarity classification accuracy are found via the genetic algorithm. 
 The following parameters are optimized:
-- STDP update scaling (_stdp_weight_),
-- Trace increase (_trace_scale_),
-- Trace memory (_tau_stdp_),
-- Total incoming weight (_total_synaptic_weight_)
-- Weight normalization interval (_weight_norm_freq_).
+- Learning rate (_learning_rate_),
+- Trace memory (_trace_memory_),
+- Total incoming weight (_total_incoming_weight_)
+- Weight normalization interval (_normalization_interval_).
 
 Parameter ranges can be found in `src/config.py`
 
@@ -54,11 +63,10 @@ Files for training and testing with HPC. Each runs a separate optimization proce
 - `test.sh` evaluates each model with multiprocessing on every core. 
 
 The **data** folder contains subfolder(s) of the structure: 
-_{input\_firing\_rate}\_{simulation\_length}\_{simulation\_length\_predict}/{optimization\_repeat\_interval}/{optimization\_sparseness}_. Currently all similation data for a single stimulus is used to predict familiarity. 
+- `stats` folder contains the results of connectivity and parameter analyses.
+_{input\_firing\_rate}\_{simulation\_length}\_{simulation\_length\_predict}\_{plasticity\_type}/{optimization\_repeat\_interval}\_{optimization\_sparseness}/{input\_correlation}_. Currently all similation data for a single stimulus is used to predict familiarity. 
 Subfolders are organized follows: 
 - `logs` directory with log files for train (optimization) and test experiments. Subirectories are named after metrics used for optimization (sc, rsync and rsync_sc - in this case both metrics were used).
 - `plots` directory with the same structure as `data/logs`. 
-- `params` directory with best parameters found after optimization for model with each combination of repeat interval and pattern size.
+- `params` directory with best parameters found after optimization for model with each combination of plasticity type, repeat interval, pattern size and input correlation.
 - Name of each log and parameter file is formed as follows: _gen\_opt\_{iteration}\_{n\_data\_samples}_.
-
-The **stats** folder contains the results of connectivity and parameter analyses.
