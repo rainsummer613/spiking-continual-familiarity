@@ -16,7 +16,7 @@ The model decodes familiarity using spike count and synchrony, outperforming LST
 
 ### Decoding familiarity
 1) Familiarity is decoded from spike trains for each stimulus characteristics: either their synchrony (Rsync) or spike count. If the metric value exceeds a certain threshold, the stimulus is classified as familiar.
-2) The threshold is calculated the [following way](src/experiment.py#L49): every time different thresholds are tested, and the one which leads to highest classification accurycy is selected.
+2) The threshold is calculated the following way: every time different thresholds are tested, and the one which leads to highest classification accurycy is selected.
 
 ### Experimental conditions
 Models were optimized on a continual familiarity task across various experimental conditions.
