@@ -121,6 +121,50 @@ def generate_recog_data(stimulus_size=100, repeat_interval=3, p_repeat=0.5, patt
         data_y.append(y)
     return zip(data_x, data_y)
 
+def generate_corr_data(stimulus_size=100, repeat_interval=3, p_repeat=0.5, pattern_size=20, n_samples=20, p_match=0.0, **kwargs):
+    """
+    Generates data for familiarity task: stimuli + labels
+    Args:
+        stimulus_size (int): length of a binary stimulus vector
+        repeat_interval (int): interval at which a stimulus can be repeated
+        p_repeat (float): probability of a stimulus repetition
+        pattern_size (int): how many ones will be in a binary stimulus vector
+        n_samples (int): the amount of samples to generate
+        p_match (float): the input correlation 
+    """
+    data_x = []
+    data_y = []
+
+    template = np.zeros(stimulus_size, dtype=int)
+    template_active = np.random.choice(stimulus_size, pattern_size, replace=False)
+    template[template_active] = 1
+    #print("TEMPLATE", len(template_active))
+    
+    for n in range(n_samples):
+        to_repeat = np.random.random(1)[0] < p_repeat
+        
+        if to_repeat and n >= repeat_interval and data_y[n-repeat_interval] == 0:
+            x = data_x[n-repeat_interval]
+            y = 1
+        else:
+            x = np.zeros(int(stimulus_size), dtype=int)
+
+            if p_match == 0:
+                idx = np.random.choice(stimulus_size, pattern_size, replace=False)
+            else:
+                n_match = int(p_match * pattern_size)
+                n_nonmatch = pattern_size - n_match
+                match_indices = np.random.choice(template_active, n_match, replace=False)
+                available = np.setdiff1d(np.arange(stimulus_size), template_active)
+                nonmatch_indices = np.random.choice(available, n_nonmatch, replace=False)
+                idx = np.concatenate([match_indices, nonmatch_indices])
+            
+            x[idx] = 1
+            y = 0
+        data_x.append(x)
+        data_y.append(y)
+    return zip(data_x, data_y)
+
 def plot_classes(y_true, scores, threshold, scores_label, plot_dir, color_new, color_fam):
     col = np.where(np.array(y_true) < 1, color_new, color_fam)
     fig, ax = plt.subplots()

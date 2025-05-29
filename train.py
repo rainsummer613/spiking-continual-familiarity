@@ -8,7 +8,7 @@ paths = [os.path.dirname(os.path.abspath(__file__)),
          os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')]
 sys.path.extend(paths)
 
-from src.config import combinations_check, params_fixed, params_change, metrics, metric_names_test
+from src.config import params_fixed, params_change, metrics_func, metric_list, data_dir, plasticity_sym
 from src.utils import generate_recog_data, create_logger
 from src.model import Izhikevich
 from src.experiment import ContinualFamiliarityPlastic
@@ -18,22 +18,18 @@ np.set_printoptions(suppress=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--combination', type=int, default=0,
+    parser.add_argument('-c', '--combination', type=int, default=4,
                         help="combination of a repeat interval, pattern size and optimization iteration from config.py")
-    parser.add_argument('-lo', '--overwrite', type=int, default=0,
+    parser.add_argument('-lo', '--log_overwrite', type=int, default=1,
                         help="overwrite optimization log file if it exists")
     args = parser.parse_args()
 
-    overwrite = bool(args.overwrite)
-    logging = bool(args.logging)
+    log_overwrite = bool(args.log_overwrite)
     combination_idx = int(args.combination)
-    repeat_interval, pattern_size, metric, file_idx = combinations_check[combination_idx]
-    metric_idx = metric_names_test.index(metric)
+    file_idx, repeat_interval, pattern_size, p_match, metric, plasticity_type = 0, 6, 20, 0.0, "rsync", "anti_hebb"  # combinations_check[combination_idx]
+    metric_idx = metric_list.index(metric)
 
-    spatiotemporal = False
-    n_jitter = 0
-
-    n_gens = 300
+    n_gens = 500
     start_gen = 1
     n_samples = 250
     generation_size = 12
@@ -44,82 +40,85 @@ if __name__ == '__main__':
     simulation_length = 1000
     simulation_length_test = 1000
 
-    """
-    # Initial parameters sets for the first generation
-    init_sets = [
-        {
-         'plasticity_scale': 0.5,
-         'total_synaptic_weight': 70.0,
-         'weight_norm_freq': 20,
-         'tau_stdp': 5,
-         'trace_scale': 0.3
-        },
-
-        {
-         'plasticity_scale': 0.7,
-         'total_synaptic_weight': 40.0,
-         'weight_norm_freq': 140,
-         'tau_stdp': 3,
-         'trace_scale': 0.6
-        },
-
-        {
-         'plasticity_scale': 0.3,
-         'total_synaptic_weight': 30.0,
-         'weight_norm_freq': 100,
-         'tau_stdp': 10,
-         'trace_scale': 0.05
-        },
-
-        {
-         'plasticity_scale': 0.4,
-         'total_synaptic_weight': 60.0,
-         'weight_norm_freq': 60,
-         'tau_stdp': 6,
-         'trace_scale': 1.0
-        },
-    ]
-    """
-    init_sets = None
-
-    # params for continual familiarity data generation
-    data_params = {"stimulus_size": params_fixed['exc_neurons'],
-                   "repeat_interval": repeat_interval,
-                   "p_repeat": 0.5,
-                   "pattern_size": pattern_size,
-                   "n_samples": n_samples,
-                   }
-    # generate simple familiarity data
-    train_data = list(generate_recog_data(**data_params))
-
-    metric_weights = {m: 0 for m in metric_names_test}
+    metric_weights = {m: 0 for m in metric_list}
     metric_weights[metric] = 1
     metrics_valid = [m for m in metric_weights if metric_weights[m] > 0]
     metric = '_'.join(metrics_valid)
 
-    data_dir = f"data/{input_rate}_{simulation_length}_{simulation_length_test}/{repeat_interval}_{pattern_size}"
-    log_dir = os.path.join(data_dir, "logs")
+    exp_data_dir = f"{data_dir}/{input_rate}_{simulation_length}_{simulation_length_test}_{plasticity_type}/{repeat_interval}_{pattern_size}/{p_match}"
+    log_dir = os.path.join(exp_data_dir, "logs")
     logger_dir = os.path.join(log_dir, metric, 'train')
     os.makedirs(logger_dir, exist_ok=True)
+
+    # Initial parameters sets for the first generation
+    init_sets = [
+        {
+         'learning_rate': -0.25,
+         'total_incoming_weight': 200.0,
+         'normalization_interval': 20,
+         'trace_memory': 15,
+         'trace_increase': 1.0,
+         'minimal_weight': 0.0025,
+         #'weight_growth': 0.005
+        },
+
+        {
+         'learning_rate': -0.7,
+         'total_incoming_weight': 70.0,
+         'normalization_interval': 140,
+         'trace_memory': 13,
+         'trace_increase': 0.6,
+         'minimal_weight': 0.01,
+         #'weight_growth': 0.01
+        },
+
+        {
+         'learning_rate': -0.3,
+         'total_incoming_weight': 130.0,
+         'normalization_interval': 100,
+         'trace_memory': 10,
+         'trace_increase': 0.05,
+         'minimal_weight': 0.02,
+         #'weight_growth': 0.001
+        },
+
+        {
+         'learning_rate': -0.4,
+         'total_incoming_weight': 100.0,
+         'normalization_interval': 60,
+         'trace_memory': 6,
+         'trace_increase': 1.0,
+         'minimal_weight': 0.5,
+         #'weight_growth': 0.1
+        },
+    ]
+    #init_sets = None
+
+    # params for continual familiarity data generation
+    data_params = {"stimulus_size": params_fixed[plasticity_type]['exc_neurons'],
+                   "repeat_interval": repeat_interval,
+                   "p_repeat": 0.5,
+                   "pattern_size": pattern_size,
+                   "n_samples": n_samples,
+                   "p_match": p_match
+                   }
+    # generate simple familiarity data
+    train_data = list(generate_recog_data(**data_params))
 
     init_fits = []
     to_train = True
 
     # Create logger
     logs_file_path = os.path.join(logger_dir, f'gen_opt_{file_idx}_{n_samples}.log')
-    if logging is False:
-        print('Train without logging')
-        logger = None
 
     # if log file does not exist
     if not os.path.isfile(logs_file_path):
         logger = create_logger(logs_file_path)
         print(f'Logger {logs_file_path} created')
-
     else:
         # if log file exists
         print(f'Logger {logs_file_path} exists')
-        if overwrite is True:
+        if log_overwrite is True:
             os.remove(logs_file_path)
             logger = create_logger(logs_file_path)
             print(f'Logger {logs_file_path} overwritten')
@@ -159,17 +158,18 @@ if __name__ == '__main__':
 
     if to_train:
         # start optimization
-        cf_experiment = ContinualFamiliarityPlastic(metrics=metrics, data=None, data_params=data_params,
+        cf_experiment = ContinualFamiliarityPlastic(metrics=metrics_func, data=None, data_params=data_params,
                                              input_rate=input_rate,
                                              simulation_length=simulation_length, 
                                              simulation_length_test=simulation_length_test,
                                              )
 
-        # TO DEL
         opt = GeneticOptimizer(metric_weights=metric_weights,
                            generation_size=generation_size,
-                           experiment=cf_experiment, model_class=Izhikevich, 
-                           params_change=params_change, params_fixed=params_fixed,
+                           experiment=cf_experiment, model_class=Izhikevich,
+                           plasticity_type=plasticity_type,
+                           plasticity_sym=plasticity_sym,
+                           params_change=params_change[plasticity_type], params_fixed=params_fixed[plasticity_type],
                            logger=logger)
         if len(init_fits) > n_early_stop:
             init_fits = init_fits[-n_early_stop:]

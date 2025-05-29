@@ -8,6 +8,7 @@ class GeneticOptimizer:
     def __init__(self, experiment, model_class,
                  metric_weights, generation_size,
                  params_change, params_fixed,
+                 plasticity_type, plasticity_sym,
                  logger):
         """
         Class for the genetic optimizer
@@ -48,6 +49,8 @@ class GeneticOptimizer:
         self.group_desc = generation_size // 4
         self.experiment = experiment
         self.model_class = model_class
+        self.plasticity_type = plasticity_type
+        self.plasticity_sym = plasticity_sym
         self.logger = logger
         
     def random_gen(self, n_descendants):
@@ -74,25 +77,38 @@ class GeneticOptimizer:
                                                   for p in self.param_fixed_ids]
         return generation
 
-    def remove_duplicates(self, param_sets):
+    def remove_duplicates(self, param_sets, max_iter=10):
         """
-        Checks for duplicated parameter sets in one generation, removes them
+        Checks for duplicated parameter sets in one generation, removes them by mutation.
 
         Args:
             param_sets (numpy array): all descendants of one generation
+            max_iter (int): maximum number of mutation iterations to resolve duplicates
+
+        Returns:
+            numpy array: deduplicated and possibly mutated parameter sets
         """
         new_param_sets = param_sets.copy()
-        count_max = 2
-        while count_max > 1:
-            unq, count = np.unique(param_sets, axis=0, return_counts=True)
+        iteration = 0
+
+        while iteration < max_iter:
+            unq, count = np.unique(new_param_sets, axis=0, return_counts=True)
             repeated_groups = unq[count > 1]
-            print('duplicates', count)
-            count_max = count.max()
+
+            if len(repeated_groups) == 0:
+                break  # No duplicates left
+
+            print(f'Iteration {iteration + 1}: duplicates = {count[count > 1]}')
 
             for repeated_group in repeated_groups:
-                repeated_idx = np.argwhere(np.all(param_sets == repeated_group, axis=1))
-                repeated_idx = repeated_idx.ravel()[1:]
-                param_sets[repeated_idx] = np.apply_along_axis(self.mutate, 1, param_sets[repeated_idx])
+                repeated_idx = np.argwhere(np.all(new_param_sets == repeated_group, axis=1)).ravel()[1:]
+                new_param_sets[repeated_idx] = np.apply_along_axis(self.mutate, 1, new_param_sets[repeated_idx])
+
+            iteration += 1
+
+        if iteration == max_iter:
+            print("Warning: Maximum deduplication iterations reached; some duplicates may remain.")
+
         return new_param_sets
         
     def first_gen(self, init_sets=None):
@@ -156,17 +172,21 @@ class GeneticOptimizer:
             child = self.mutate(parents[np.random.choice(2, 1)[0]])
         return child
 
-    def find_weighted_best(self, fits):
+    def get_best_ids_weighted(self, fits):
         """
-        Calculates best parameter sets (with greatest fitness) with weights for different metrics
+        Calculates best parameter sets (with the highest fitness) with weights for different metrics
 
         Args:
             fits (numpy array): list of accuracies for each parameter set
         """
-        weights_arr = np.array([self.metric_weights[self.index_to_metric[i]] for i in range(fits.shape[1])])
-        fits_weighted_sum = (fits * weights_arr.T).sum(1)
-        return fits_weighted_sum.argsort()
-    
+        weights = np.array([self.metric_weights[self.index_to_metric[i]] for i in range(fits.shape[1])])
+        weighted_scores = fits @ weights
+        return np.argsort(weighted_scores)[::-1]
+
+    def get_best_metric_value(self, metric_values):
+        weights = [self.metric_weights[self.index_to_metric[i]] for i in range(len(metric_values))]
+        return metric_values[np.argmax(weights)]
+
     def calculate_fitness(self, param_set, output, idx):
         """
         Measures fitness (e.g. accuracy) of one parameter set
@@ -179,6 +199,8 @@ class GeneticOptimizer:
         print(f'{mp.current_process().name} STARTED params_set {idx}')
         
         model_params = {self.index_to_param[i]: v for i, v in enumerate(param_set)}
+        model_params["plasticity_type"] = self.plasticity_type
+        model_params["plasticity_sym"] = self.plasticity_sym
         model, res = self.experiment.run(model_class=self.model_class, model_params=model_params,
                                   thresholds=None,
                                   proc_name=mp.current_process().name)
@@ -222,23 +244,14 @@ class GeneticOptimizer:
             p.terminate()
 
         fits = np.array([el['fitness'] for el in results])
-        print(f'results {results}')
         
         # find best descendants
-        best_ids = fits.argsort()[-self.group_desc:]
-        best_fit = fits[best_ids[-1]]
+        print("metric_weights", self.metric_weights)
+        ids_sorted = self.get_best_ids_weighted(fits)
+        best_ids = ids_sorted[:self.group_desc]
+        best_fit = self.get_best_metric_value(fits[ids_sorted[0]])
 
-        if len(self.metric_weights) == 1:
-            best_ids = fits.argsort()[-self.group_desc:]
-            best_fit = fits[best_ids[-1]]
-        else:
-            print('started comparing results')
-            best_sorted = self.find_weighted_best(fits)
-            best_ids = best_sorted[-self.group_desc:]
-            best_fit = np.max(fits[best_ids[-1]])
-
-        print('best_fit', best_fit)
-        print('best_ids', best_ids)
+        print("best_fit", best_fit)
         for i in best_ids:
             print('best', i, results[int(i)])
 

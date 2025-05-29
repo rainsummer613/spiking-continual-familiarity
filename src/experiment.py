@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 from measure import accuracy_abbott_score, measure_mean_sc, measure_max_sc
-from utils import find_transient, downsample_spikes, generate_recog_data, generate_poisson_input
+from utils import find_transient, generate_corr_data, generate_poisson_input
 
 class Experiment:
     def __init__(self, metrics, data, data_params, simulation_length=None):
@@ -35,10 +35,13 @@ class Experiment:
                                                for metric in self.metrics}
 
     @staticmethod
-    def evaluate_mult_metric(res_dict, threshold_dict, y_true):
+    def evaluate_mult_metric(res_dict, y_true, threshold_dict=None, hebbian=True):
         y_pred = {}
         for metric in res_dict:
-            y_pred[metric] = [1 if r > threshold_dict[metric] else 0 for r in res_dict[metric]]
+            if hebbian:
+                y_pred[metric] = [1 if r > threshold_dict[metric] else 0 for r in res_dict[metric]]
+            else:
+                y_pred[metric] = [1 if r < threshold_dict[metric] else 0 for r in res_dict[metric]]
 
         best_score = {}
         for metric in y_pred:
@@ -110,11 +113,12 @@ class ContinualFamiliarityPlastic(Experiment):
         self.repeat_interval = self.data_params.get('repeat_interval', 3)
 
         if self.data is None:
-            self.data = list(generate_recog_data(repeat_interval=self.repeat_interval,
+            self.data = list(generate_corr_data(repeat_interval=self.repeat_interval,
                                                  stimulus_size=self.data_params.get("exc_neurons", 100),
                                                  pattern_size=self.data_params.get('pattern_size', 30),
                                                  n_samples=self.data_params.get('n_samples', 150),
-                                                 p_repeat=0.5)
+                                                 p_repeat=0.5,
+                                                 p_match=self.data_params.get("p_match", 0.0))
                              )
 
     def run(self, model_class, model_params, thresholds, optimize=True, **kwargs):
@@ -133,8 +137,8 @@ class ContinualFamiliarityPlastic(Experiment):
         """
         model = model_class(**model_params)
         res = {metric: [] for metric in self.metrics}
-        if "rsync" in res:
-            res = dict({"rsync_num": [], "rsync_den": []}, **res)
+        #if "rsync" in res:
+        #    res = dict({"rsync_num": [], "rsync_den": []}, **res)
         y_true = []
         rate_high = []
         rate_low = []
@@ -161,8 +165,8 @@ class ContinualFamiliarityPlastic(Experiment):
 
             if i > 0:
                 neurons = np.nonzero(x)[0]
-                transient_start, transient_end = find_transient(spikes)
-                # transient_end = 0
+                transient_start, transient_end = 0, 0  # find_transient(spikes)
+
                 # check if the output firing rate is appropriate wrt input firing rate
                 n_seconds = spikes.shape[1] / 1000
                 max_rate = measure_max_sc(spikes[neurons, transient_end:]) / n_seconds
@@ -180,16 +184,13 @@ class ContinualFamiliarityPlastic(Experiment):
 
                     spikes_measure = spikes[neurons, transient_end:]
                     score = metric_func(spikes_measure, **metric_func_kwargs)
+                    #print(metric, spikes_measure.sum(1).max(), score)
                     res[metric].append(score)
                 y_true.append(y)
 
         out_score = {}
 
-        # check if hebbian or anti-Hebbian plasticity
-        if model_params["plasticity_scale"] >= 0:
-            hebbian = True
-        else:
-            hebbian = False
+        hebbian = "anti" not in model.plasticity_type
 
         for metric in res:
             out_score[metric] = {}
@@ -203,7 +204,8 @@ class ContinualFamiliarityPlastic(Experiment):
 
         if optimize is False:
             thresholds = {metric: out_score[metric]['threshold'] for metric in out_score}
-            mult_metric_scores = Experiment.evaluate_mult_metric(res, thresholds, np.array(y_true))
+            mult_metric_scores = Experiment.evaluate_mult_metric(res, np.array(y_true),
+                                                                 thresholds, hebbian)
 
             for metric in mult_metric_scores:
                 out_score[metric] = {"score": mult_metric_scores[metric]}
